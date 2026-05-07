@@ -173,6 +173,8 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
-            sudo systemctl restart mlops-serve
-            sleep 5
-            sudo systemctl is-active mlops-serve && echo "Service restarted successfully." || exit 1
+            sudo pkill -f "uvicorn src.serve:app" || true
+            sleep 8
+            sudo systemctl is-active mlops-serve && echo "Service is active." || sudo systemctl start mlops-serve
+            sleep 3
+            sudo systemctl is-active mlops-serve && echo "Deploy OK." || exit 1
