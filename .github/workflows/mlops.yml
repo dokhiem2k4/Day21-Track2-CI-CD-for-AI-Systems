@@ -174,7 +174,5 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             sudo pkill -f "uvicorn src.serve:app" || true
-            sleep 8
-            sudo systemctl is-active mlops-serve && echo "Service is active." || sudo systemctl start mlops-serve
-            sleep 3
+            sleep 12
             sudo systemctl is-active mlops-serve && echo "Deploy OK." || exit 1
