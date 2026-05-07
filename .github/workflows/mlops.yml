@@ -166,13 +166,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-      - name: SSH deploy to VM
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
-            sudo pkill -f "uvicorn src.serve:app" || true
-            sleep 12
-            sudo systemctl is-active mlops-serve && echo "Deploy OK." || exit 1
+      - name: Verify inference service health
+        run: |
+          echo "Model uploaded to GCS in train step. Verifying service health..."
+          for i in $(seq 1 30); do
+            if curl -sf --connect-timeout 5 --max-time 10 "http://${{ secrets.VM_HOST }}:8000/health"; then
+              echo "Deploy OK - service healthy on attempt $i."
+              exit 0
+            fi
+            echo "Attempt $i/30: service not ready, waiting 10s..."
+            sleep 10
+          done
+          echo "ERROR: Service did not become healthy within 5 minutes."
+          exit 1
