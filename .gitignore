@@ -11,3 +11,6 @@ sa-key.json
 __pycache__/
 *.pyc
 .DS_Store
+mlruns/
+mlflow_ui_latest_run.png
+.bucket_name
