@@ -44,6 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       accuracy: ${{ steps.read_metrics.outputs.accuracy }}
+      old_accuracy: ${{ steps.prev_metrics.outputs.old_accuracy }}
 
     steps:
       - uses: actions/checkout@v4
@@ -61,11 +62,37 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SA_EMAIL }}
 
+      # Bonus 4: tải metrics cũ TRƯỚC khi train để so sánh rollback
+      - name: Download previous metrics
+        id: prev_metrics
+        run: |
+          OLD_ACC=$(python - <<'EOF'
+          from google.cloud import storage
+          import json, os
+          try:
+              client = storage.Client()
+              blob = client.bucket(os.environ["CLOUD_BUCKET"]).blob("models/latest/metrics.json")
+              prev = json.loads(blob.download_as_text())
+              print(prev.get("accuracy", 0.0))
+          except Exception as e:
+              print(0.0)
+          EOF
+          )
+          echo "old_accuracy=$OLD_ACC" >> $GITHUB_OUTPUT
+          echo "Previous accuracy: $OLD_ACC"
+        env:
+          CLOUD_BUCKET: ${{ secrets.CLOUD_BUCKET }}
+
       - name: Pull data with DVC
         run: dvc pull data/train_phase1.csv.dvc data/eval.csv.dvc
 
       - name: Train model
         run: python src/train.py
+        env:
+          # Bonus 1: DagsHub MLflow tracking (hoat dong khi secrets duoc set)
+          MLFLOW_TRACKING_URI: ${{ secrets.DAGSHUB_TRACKING_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
 
       - name: Read metrics
         id: read_metrics
@@ -73,25 +100,28 @@ jobs:
           ACC=$(python -c "import json; d=json.load(open('outputs/metrics.json')); print(d['accuracy'])")
           echo "accuracy=$ACC" >> $GITHUB_OUTPUT
 
-      - name: Upload model to GCS
+      - name: Upload model and metrics to GCS
         run: |
           python - <<'EOF'
           from google.cloud import storage
           import os
           client = storage.Client()
           bucket = client.bucket(os.environ["CLOUD_BUCKET"])
-          blob = bucket.blob("models/latest/model.pkl")
-          blob.upload_from_filename("models/model.pkl")
-          print("Model uploaded to GCS.")
+          bucket.blob("models/latest/model.pkl").upload_from_filename("models/model.pkl")
+          bucket.blob("models/latest/metrics.json").upload_from_filename("outputs/metrics.json")
+          print("Model and metrics uploaded to GCS.")
           EOF
         env:
           CLOUD_BUCKET: ${{ secrets.CLOUD_BUCKET }}
 
-      - name: Save metrics as artifact
+      # Bonus 3: lưu cả metrics.json và report.txt làm artifact
+      - name: Save metrics and report as artifact
         uses: actions/upload-artifact@v4
         with:
           name: metrics
-          path: outputs/metrics.json
+          path: |
+            outputs/metrics.json
+            outputs/report.txt
 
 
   # ---------------------------------------------------------------------------
@@ -110,6 +140,20 @@ jobs:
           if acc < 0.70:
               raise SystemExit(f"FAILED: accuracy {acc:.4f} < 0.70. Huy deploy.")
           print(f"PASSED: accuracy {acc:.4f} >= 0.70. Dang trien khai model.")
+          EOF
+
+      # Bonus 4: rollback nếu model mới kém hơn model đang chạy
+      - name: Rollback check
+        run: |
+          python - <<'EOF'
+          new_acc = float("${{ needs.train.outputs.accuracy }}")
+          old_acc = float("${{ needs.train.outputs.old_accuracy }}")
+          print(f"Previous: {old_acc:.4f} | New: {new_acc:.4f}")
+          if new_acc < old_acc:
+              raise SystemExit(
+                  f"ROLLBACK: model moi ({new_acc:.4f}) kem hon model hien tai ({old_acc:.4f}). Huy deploy."
+              )
+          print(f"OK: model moi tot hon hoac bang. Tien hanh deploy.")
           EOF
 
 
