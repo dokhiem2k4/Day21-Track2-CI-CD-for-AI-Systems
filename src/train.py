@@ -1,5 +1,4 @@
 import mlflow
-import mlflow.sklearn
 import pandas as pd
 import yaml
 import json
@@ -80,7 +79,6 @@ def train(
 
         mlflow.log_metric("accuracy", acc)
         mlflow.log_metric("f1_score", f1)
-        mlflow.sklearn.log_model(model, "model")
 
         print(f"Accuracy: {acc:.4f} | F1: {f1:.4f}")
 
@@ -110,8 +108,6 @@ def train(
             f.write("Class Distribution (train):\n")
             for cls, ratio in class_dist.items():
                 f.write(f"  Class {cls}: {float(ratio):.1%}\n")
-        mlflow.log_artifact("outputs/report.txt")
-
         os.makedirs("models", exist_ok=True)
         joblib.dump(model, "models/model.pkl")
 
