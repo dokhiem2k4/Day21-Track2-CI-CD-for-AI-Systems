@@ -1,6 +1,6 @@
 # Báo Cáo Lab MLOps — Day 21: CI/CD cho AI Systems
 
-**Sinh viên:** dokhiem2k4  
+**Sinh viên:** Đỗ Minh Khiêm - 2A202600463  
 **Repo:** https://github.com/dokhiem2k4/Day21-Track2-CI-CD-for-AI-Systems  
 **Ngày:** 07/05/2026
 
